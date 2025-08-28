@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cleveland Browns Roster by Week</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f6f6f6; margin: 0; padding: 0; }
+    .container { max-width: 1200px; margin: 30px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 24px; }
+    h1 { text-align: center; color: #3b2e2a; }
+    .section { margin-bottom: 32px; }
+    .section h2 { color: #4b3e35; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+    .positions { display: flex; flex-wrap: wrap; gap: 24px; }
+    .position { flex: 1 1 220px; min-width: 220px; }
+    .position h3 { margin: 8px 0 12px 0; color: #6b4f3a; font-size: 1.1em; }
+    .players { display: flex; flex-wrap: wrap; gap: 12px; }
+    .player-card { background: #f9f9f9; border-radius: 6px; box-shadow: 0 1px 4px #0001; padding: 10px; display: flex; align-items: center; gap: 10px; min-width: 200px; }
+    .player-card img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid #e3e3e3; }
+    .player-info { display: flex; flex-direction: column; }
+    .player-name { font-weight: bold; color: #3b2e2a; }
+    .player-meta { font-size: 0.95em; color: #555; }
+    .week-select { display: flex; justify-content: center; margin-bottom: 24px; }
+    select { font-size: 1.1em; padding: 6px 12px; border-radius: 4px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Cleveland Browns Roster by Week</h1>
+    <div class="week-select">
+      <label for="week">Select Week: </label>
+      <select id="week"></select>
+    </div>
+    <div id="roster"></div>
+  </div>
+  <script>
+    // CSV file path
+    const CSV_FILE = 'Roster_info.csv';
+
+    // Helper: Parse CSV to array of objects
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const headers = lines[0].split(',');
+      return lines.slice(1).map(line => {
+        // Handle quoted URLs and commas
+        const values = [];
+        let cur = '', inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') inQuotes = !inQuotes;
+          else if (char === ',' && !inQuotes) { values.push(cur); cur = ''; }
+          else cur += char;
+        }
+        values.push(cur);
+        const obj = {};
+        headers.forEach((h, i) => obj[h.trim()] = values[i] ? values[i].replace(/^"|"$/g, '') : '');
+        return obj;
+      });
+    }
+
+    // Helper: Group by key
+    function groupBy(arr, key) {
+      return arr.reduce((acc, item) => {
+        (acc[item[key]] = acc[item[key]] || []).push(item);
+        return acc;
+      }, {});
+    }
+
+    // Fetch and render
+    fetch(CSV_FILE)
+      .then(r => r.text())
+      .then(csv => {
+        const data = parseCSV(csv);
+        // Get unique weeks
+        const weeks = [...new Set(data.map(row => row.week))].sort((a, b) => +a - +b);
+        const weekSelect = document.getElementById('week');
+        weeks.forEach(w => {
+          const opt = document.createElement('option');
+          opt.value = w;
+          opt.textContent = w;
+          weekSelect.appendChild(opt);
+        });
+        function renderRoster(week) {
+          const weekData = data.filter(row => row.week === week);
+          const bySide = groupBy(weekData, 'Team_Side');
+          const rosterDiv = document.getElementById('roster');
+          rosterDiv.innerHTML = '';
+          ['Offence', 'Defence', 'Special Teams'].forEach(side => {
+            if (!bySide[side]) return;
+            const section = document.createElement('div');
+            section.className = 'section';
+            section.innerHTML = `<h2>${side}</h2>`;
+            // Group by position
+            const byPos = groupBy(bySide[side], 'position');
+            const positionsDiv = document.createElement('div');
+            positionsDiv.className = 'positions';
+            Object.keys(byPos).sort().forEach(pos => {
+              const posDiv = document.createElement('div');
+              posDiv.className = 'position';
+              posDiv.innerHTML = `<h3>${pos}</h3>`;
+              const playersDiv = document.createElement('div');
+              playersDiv.className = 'players';
+              byPos[pos].forEach(player => {
+                const card = document.createElement('div');
+                card.className = 'player-card';
+                card.innerHTML = `
+                  <img src="${player.headshot_url}" alt="${player.player_name}">
+                  <div class="player-info">
+                    <span class="player-name">${player.player_name}</span>
+                    <span class="player-meta">#${player.jersey_number} | ${player.position}</span>
+                  </div>
+                `;
+                playersDiv.appendChild(card);
+              });
+              posDiv.appendChild(playersDiv);
+              positionsDiv.appendChild(posDiv);
+            });
+            section.appendChild(positionsDiv);
+            rosterDiv.appendChild(section);
+          });
+        }
+        weekSelect.addEventListener('change', e => renderRoster(e.target.value));
+        renderRoster(weeks[0]);
+      });
+  </script>
+</body>
+</html>
